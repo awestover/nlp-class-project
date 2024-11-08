@@ -21,6 +21,10 @@ https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
+"""
+From https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py
+"""
+
 import logging
 import math
 import os
@@ -71,7 +75,9 @@ class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
-
+    # text_direction: str = field(
+    #
+    # )
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
@@ -80,10 +86,10 @@ class ModelArguments:
             )
         },
     )
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
-    )
+    # model_type: Optional[str] = field(
+    #     default=None,
+    #     metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+    # )
     config_overrides: Optional[str] = field(
         default=None,
         metadata={
