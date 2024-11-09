@@ -2,3 +2,4 @@ accelerate
 datasets
 torch
 transformers
+wandb
