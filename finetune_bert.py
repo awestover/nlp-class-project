@@ -1,6 +1,9 @@
 """
+
+# BERT base
 accelerate launch --mixed_precision bf16 finetune_bert.py \
 --model_direction rtl \
+--model_name bert-base-uncased \
 --warmup_steps 500 \
 --learning_rate 5e-5 \
 --per_device_train_batch_size 128 \
@@ -13,11 +16,99 @@ accelerate launch --mixed_precision bf16 finetune_bert.py \
 
 accelerate launch --mixed_precision bf16 finetune_bert.py \
 --model_direction ltr \
+--model_name bert-base-uncased \
 --warmup_steps 500 \
 --learning_rate 5e-5 \
 --per_device_train_batch_size 128 \
 --per_device_eval_batch_size 128 \
 --output_dir checkpoints/bert_base_ltr/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+# DistilBERT scratch
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction rtl \
+--model_name distilbert/distilbert-base-uncased \
+--train_from_scratch \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 128 \
+--per_device_eval_batch_size 128 \
+--output_dir checkpoints/distilbert_base_rtl_scratch/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction ltr \
+--model_name distilbert/distilbert-base-uncased \
+--train_from_scratch \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 128 \
+--per_device_eval_batch_size 128 \
+--output_dir checkpoints/distilbert_base_ltr_scratch/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+# DistilBERT base
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction rtl \
+--model_name distilbert/distilbert-base-uncased \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 128 \
+--per_device_eval_batch_size 128 \
+--output_dir checkpoints/distilbert_base_rtl/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction ltr \
+--model_name distilbert/distilbert-base-uncased \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 128 \
+--per_device_eval_batch_size 128 \
+--output_dir checkpoints/distilbert_base_ltr/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+# BERT large
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction rtl \
+--model_name bert-large-uncased \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 64 \
+--gradient_accumulation_steps 2 \
+--per_device_eval_batch_size 64 \
+--output_dir checkpoints/bert_large_rtl/ \
+--eval_steps 899 \
+--block_size 128 \
+--num_train_epochs 4 \
+--weight_decay 1e-4
+
+
+accelerate launch --mixed_precision bf16 finetune_bert.py \
+--model_direction ltr \
+--model_name bert-large-uncased \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 64 \
+--gradient_accumulation_steps 2 \
+--per_device_eval_batch_size 64 \
+--output_dir checkpoints/bert_large_ltr/ \
 --eval_steps 899 \
 --block_size 128 \
 --num_train_epochs 4 \
@@ -49,8 +140,9 @@ def parse_args():
     # Model
     parser.add_argument("--model_direction", type=str, required=True, choices=["ltr", "rtl"],
                         help="Whether to train a left-to-right or right-to-left LM.")
-    parser.add_argument("--model_name_or_path", type=str, default="bert-base-uncased",
-                        help="Checkpoint to initialize weights from.")  # TODO: option for training from scratch w/ conf
+    parser.add_argument("--model_name", type=str,
+                        help="Name of tokenizer to load. If not training from scratch, "
+                             "will also load model weights.")
 
     # Data
     parser.add_argument("--dataset_name", type=str, default="Salesforce/wikitext",
@@ -67,6 +159,7 @@ def parse_args():
     )
 
     # Training
+    parser.add_argument("--train_from_scratch", action="store_true")
     parser.add_argument("--output_dir", type=str, required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--per_device_train_batch_size", type=int, default=8)
@@ -81,7 +174,9 @@ def parse_args():
     parser.add_argument("--eval_steps", type=int, default=20000,
                         help="Number of update steps between two logs.")
     parser.add_argument("--dataloader_num_workers", type=int, default=8)
-    return parser.parse_args()
+
+    args = parser.parse_args()
+    return args
 
 
 def main():
@@ -89,8 +184,14 @@ def main():
 
     accelerator = accelerate.Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, log_with="wandb", project_dir=args.output_dir)
     # Will `add_attn_hooks` to `model` later
-    model = transformers.AutoModelForMaskedLM.from_pretrained(args.model_name_or_path, attn_implementation="sdpa")
-    tokenizer = transformers.AutoTokenizer.from_pretrained(args.model_name_or_path)
+
+    # Load model weights in both cases, but re-initialize if training from scratch
+    model = transformers.AutoModelForMaskedLM.from_pretrained(args.model_name, attn_implementation="sdpa")
+    if args.train_from_scratch:
+        model.apply(model._initialize_weights)
+        model.tie_weights()  # probably not applicable
+
+    tokenizer = transformers.AutoTokenizer.from_pretrained(args.model_name)
 
     # Data
     raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
@@ -119,13 +220,17 @@ def main():
     model.train()
     optimizer.zero_grad()
 
-    accelerator.init_trackers(project_name="NLP-Class-Project", config=vars(args),
-                              init_kwargs={"wandb": {"entity": "frostbyte"}})
+    wandb.require("core")
+    accelerator.init_trackers(
+        project_name="NLP-Class-Project",
+        config=vars(args) | {"model_parameters": sum(p.numel() for p in model.parameters())},
+        init_kwargs={"wandb": {"entity": "frostbyte"}}
+    )
 
     global_step = 0  # unaccumulated steps
     past_losses = []
     for epoch in tqdm(range(args.num_train_epochs), position=0, leave=True, desc="Epoch"):
-        for batch in tqdm(train_loader, position=1, leave=False, desc="Train Iteration"):
+        for step, batch in enumerate(tqdm(train_loader, position=1, leave=False, desc="Train Iteration")):
             with accelerator.accumulate(model):
                 labels = batch.pop("labels")
                 outputs = model(**batch)
@@ -137,7 +242,7 @@ def main():
                 optimizer.zero_grad()
 
             past_losses.append(loss.item())
-            if (global_step + 1) % args.logging_steps == 1:
+            if (global_step + 1) % args.logging_steps == 0:
                 avg_train_loss = torch.tensor(past_losses).mean().item()  # Assuming 1 GPU
                 accelerator.log({
                     "train_loss": avg_train_loss,
@@ -163,7 +268,8 @@ def main():
                                 log_kwargs={"wandb": {"commit": False}})
                 model.train()
 
-            global_step += 1
+            if ((step + 1) % args.gradient_accumulation_steps == 0) or step == (len(train_loader) - 1):
+                global_step += 1
 
     model.save_pretrained(os.path.join(args.output_dir, f"epoch_{epoch}_checkpt"))
 

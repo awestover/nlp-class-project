@@ -4,7 +4,13 @@ import torch
 import torch.nn as nn
 import transformers
 from datasets import DatasetDict
-from transformers import PreTrainedTokenizer
+from transformers.models.bert.modeling_bert import BERT_SELF_ATTENTION_CLASSES
+from transformers.models.distilbert.modeling_distilbert import DISTILBERT_ATTENTION_CLASSES
+
+
+BERT_ATTENTIONS = tuple(BERT_SELF_ATTENTION_CLASSES.values())
+DISTILBERT_ATTENTIONS = tuple(DISTILBERT_ATTENTION_CLASSES.values())
+IMPLEMENTED_ATTENTIONS = tuple(BERT_ATTENTIONS + DISTILBERT_ATTENTIONS)
 
 
 def ltr_mask(seq_len: int) -> torch.Tensor:
@@ -16,7 +22,7 @@ def rtl_mask(seq_len: int) -> torch.Tensor:
     return ltr_mask(seq_len).T
 
 
-def add_attn_hooks(model: transformers.BertModel, model_direction: str) -> None:
+def add_attn_hooks(model: transformers.PreTrainedModel, model_direction: str) -> None:
     """
     Forces bidirectional `model` into a unidirectional one based on `model_direction`.
     Adds hooks to `model`'s self-attention blocks, in-place.
@@ -29,29 +35,48 @@ def add_attn_hooks(model: transformers.BertModel, model_direction: str) -> None:
     mask_func = ltr_mask if model_direction.lower() == "ltr" else rtl_mask
     model.register_buffer("attention_mask", mask_func(model.config.max_position_embeddings).to(model.device))
 
-    def attn_hook(attn_module: nn.Module, args: tuple, kwargs: dict):
+    def get_attention_mask(seq_len: int) -> torch.Tensor:
         """
-        Assuming https://github.com/huggingface/transformers/blob/33868a057c02f0368ba63bd1edb746be38fe3d90/src/transformers/models/bert/modeling_bert.py#L515
-        so no `kwargs` and `attention_mask` is second positional arg.
-
-        Uses nonlocal `model.attention_mask` to save memory.
+        Returns `model.attention_mask` if `seq_len` is the max length, generate new attention mask otherwise.
         """
-        assert not kwargs
-
-        args = list(args)
-        seq_len = args[0].size(1)
         # During training, we should always be padding to max length, so we can always use `model.attention_mask`.
         if seq_len != model.config.max_position_embeddings:
             assert not torch.is_grad_enabled()
-            attention_mask = ltr_mask(seq_len).to(model.device)
+            return ltr_mask(seq_len).to(model.device)  # TODO: should this be mask_func?
+            # TODO: should we just have a different function to "prepare" model for inference?
         else:
-            attention_mask = model.attention_mask
+            return model.attention_mask
 
-        args[1] = attention_mask
-        return tuple(args), kwargs
+    def attn_hook(attn_module: nn.Module, args: tuple, kwargs: dict):
+        """
+        Uses nonlocal `model.attention_mask` to save memory.
+        """
+        if isinstance(attn_module, BERT_ATTENTIONS):
+            """
+            Assuming https://github.com/huggingface/transformers/blob/33868a057c02f0368ba63bd1edb746be38fe3d90/src/transformers/models/bert/modeling_bert.py#L515
+            so no `kwargs` and `attention_mask` is second positional arg.
+            """
+            assert not kwargs
+
+            args = list(args)
+            seq_len = args[0].size(1)
+            args[1] = get_attention_mask(seq_len)
+            args = tuple(args)
+        elif isinstance(attn_module, DISTILBERT_ATTENTIONS):
+            """
+            Assuming https://github.com/huggingface/transformers/blob/33eef992503689ba1af98090e26d3e98865b2a9b/src/transformers/models/distilbert/modeling_distilbert.py#L481
+            so "mask" in `kwargs`.
+            """
+            assert not args and "mask" in kwargs and "query" in kwargs, f"{args=} {kwargs=}"
+            seq_len = kwargs["query"].size(1)
+            kwargs["mask"] = get_attention_mask(seq_len)
+        else:
+            raise NotImplementedError(f"{attn_module=}")
+
+        return args, kwargs
 
     for name, module in model.named_modules():
-        if isinstance(module, transformers.models.bert.modeling_bert.BertSelfAttention):
+        if isinstance(module, IMPLEMENTED_ATTENTIONS):
             module._forward_pre_hooks.clear()  # in case we run multiple times
             module.register_forward_pre_hook(attn_hook, with_kwargs=True)
 
@@ -75,7 +100,11 @@ def causal_loss_wrapper(model_direction: str):
     return loss_fn
 
 
-def preprocess_datasets(raw_datasets: DatasetDict, tokenizer: PreTrainedTokenizer, block_size: int) -> DatasetDict:
+def preprocess_datasets(
+    raw_datasets: DatasetDict,
+    tokenizer: transformers.PreTrainedTokenizer,
+    block_size: int
+) -> DatasetDict:
     """
     Preprocess datasets.
     Closely follows https://github.com/huggingface/transformers/blob/7bbc62474391aff64f63fcc064c975752d1fa4de/examples/pytorch/language-modeling/run_clm.py#L449
