@@ -1,9 +1,31 @@
 """
+# BERT japanese RTL
+accelerate launch --mixed_precision bf16 finetune_bert-japanese.py \
+--model_direction rtl \
+--model_name distilbert/distilbert-base-multilingual-cased \
+--dataset_name ntotsuka123/ja-pretrain \
+--warmup_steps 500 \
+--learning_rate 5e-5 \
+--per_device_train_batch_size 128 \
+--gradient_accumulation_steps 1 \
+--per_device_eval_batch_size 128 \
+--output_dir checkpoints/distilbert_base_japan_rtl/ \
+--eval_steps 1000 \
+--block_size 128 \
+--num_train_epochs 1 \
+--weight_decay 1e-4
 
-# BERT base
+
+is there some way to only do 1% of the data...
+got it 
+you have to change the code. I don't want ot do it right now
+
+# BERT japanese LTR
 accelerate launch --mixed_precision bf16 finetune_bert.py \
 --model_direction rtl \
---model_name bert-base-uncased \
+--dataset_name oscar \
+--dataset_config_name unshuffled_deduplicated_ja \
+--model_name cl-tohoku/bert-base-japanese \
 --warmup_steps 500 \
 --learning_rate 5e-5 \
 --per_device_train_batch_size 128 \
@@ -14,144 +36,7 @@ accelerate launch --mixed_precision bf16 finetune_bert.py \
 --num_train_epochs 4 \
 --weight_decay 1e-4
 
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction ltr \
---model_name bert-base-uncased \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 128 \
---per_device_eval_batch_size 128 \
---output_dir checkpoints/bert_base_ltr/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
 
-# DistilBERT scratch
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction rtl \
---model_name distilbert/distilbert-base-uncased \
---train_from_scratch \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 128 \
---per_device_eval_batch_size 128 \
---output_dir checkpoints/distilbert_base_rtl_scratch/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction ltr \
---model_name distilbert/distilbert-base-uncased \
---train_from_scratch \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 128 \
---per_device_eval_batch_size 128 \
---output_dir checkpoints/distilbert_base_ltr_scratch/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-# DistilBERT base
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction rtl \
---model_name distilbert/distilbert-base-uncased \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 128 \
---per_device_eval_batch_size 128 \
---output_dir checkpoints/distilbert_base_rtl/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction ltr \
---model_name distilbert/distilbert-base-uncased \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 128 \
---per_device_eval_batch_size 128 \
---output_dir checkpoints/distilbert_base_ltr/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-# BERT large
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction rtl \
---model_name bert-large-uncased \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 64 \
---gradient_accumulation_steps 2 \
---per_device_eval_batch_size 64 \
---output_dir checkpoints/bert_large_rtl/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-
-accelerate launch --mixed_precision bf16 finetune_bert.py \
---model_direction ltr \
---model_name bert-large-uncased \
---warmup_steps 500 \
---learning_rate 5e-5 \
---per_device_train_batch_size 64 \
---gradient_accumulation_steps 2 \
---per_device_eval_batch_size 64 \
---output_dir checkpoints/bert_large_ltr/ \
---eval_steps 899 \
---block_size 128 \
---num_train_epochs 4 \
---weight_decay 1e-4
-
-for size in 35 19 11 6; do
-    for dir in ltr rtl; do
-        accelerate launch --mixed_precision bf16 finetune_bert.py \
-        --model_direction $dir \
-        --model_name bert-base-uncased \
-        --model_config "configs/bert_${size}M.json" \
-        --train_from_scratch \
-        --warmup_steps 500 \
-        --learning_rate 5e-5 \
-        --per_device_train_batch_size 128 \
-        --per_device_eval_batch_size 128 \
-        --output_dir "checkpoints/bert_${size}_${dir}_scratch/" \
-        --eval_steps 899 \
-        --block_size 128 \
-        --num_train_epochs 4 \
-        --weight_decay 1e-4
-    done
-done
-
-for seed in 0 1 2 3 4; do
-    for dir in ltr rtl; do
-        accelerate launch --mixed_precision bf16 finetune_bert.py \
-        --model_direction $dir \
-        --model_name bert-base-uncased \
-        --model_config "configs/bert_${size}M.json" \
-        --train_from_scratch \
-        --warmup_steps 500 \
-        --learning_rate 5e-5 \
-        --per_device_train_batch_size 128 \
-        --per_device_eval_batch_size 128 \
-        --output_dir "checkpoints/overwritable_temp/" \
-        --eval_steps 899 \
-        --block_size 128 \
-        --num_train_epochs 1 \
-        --weight_decay 1e-4 \
-        --seed $seed
-    done
-done
 """
 
 import argparse
@@ -163,11 +48,12 @@ import torch
 import transformers
 import wandb
 from datasets import load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from tqdm.auto import tqdm
 from transformers import set_seed
 
 from utils import preprocess_datasets, convert_to_torch_dataset, add_attn_hooks, causal_loss_wrapper
+
 
 
 def parse_args():
@@ -217,7 +103,6 @@ def parse_args():
     parser.add_argument("--eval_steps", type=int, default=20000,
                         help="Number of update steps between two logs.")
     parser.add_argument("--dataloader_num_workers", type=int, default=8)
-    parser.add_argument("--seed", type=int, default=42, help="Random seed.")
 
     args = parser.parse_args()
 
@@ -228,7 +113,7 @@ def main():
     args = parse_args()
 
     accelerator = accelerate.Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, log_with="wandb", project_dir=args.output_dir)
-    set_seed(args.seed)
+    set_seed(42)
 
     # Will `add_attn_hooks` to `model` later
     if args.model_config is not None:
@@ -246,7 +131,7 @@ def main():
     tokenizer = transformers.AutoTokenizer.from_pretrained(args.model_name)
 
     # Data
-    raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+    raw_datasets = load_dataset(args.dataset_name)
     block_size = args.block_size if args.block_size is not None else model.config.max_position_embeddings
     model.config.max_position_embeddings = block_size
 
@@ -254,14 +139,24 @@ def main():
     for split, hf_dataset in processed_datasets.items():
         processed_datasets[split] = convert_to_torch_dataset(hf_dataset)
 
-    train_loader = DataLoader(processed_datasets["train"], batch_size=args.per_device_train_batch_size, shuffle=True)
-    val_loader = DataLoader(processed_datasets["validation"], batch_size=args.per_device_eval_batch_size)
+    train_val_split = processed_datasets["train"].train_test_split(test_size=0.2, shuffle=True)
+    train_indices = torch.randperm(len(train_val_split["train"]))[:int(0.4 * len(train_val_split["train"]))]
+    train_subset = Subset(train_val_split["train"], train_indices)
+    val_indices = torch.randperm(len(train_val_split["test"]))[:int(0.01 * len(train_val_split["test"]))]
+    val_subset = Subset(train_val_split["test"], val_indices)
+    train_loader = DataLoader(train_subset, batch_size=args.per_device_train_batch_size, shuffle=True)
+    val_loader = DataLoader(val_subset, batch_size=args.per_device_eval_batch_size)
+
+    # train_val_split = processed_datasets["train"].train_test_split(test_size=0.2, shuffle=True)
+    # train_loader = DataLoader(train_val_split["train"], batch_size=args.per_device_train_batch_size, shuffle=True)
+    # val_loader = DataLoader(train_val_split["test"], batch_size=args.per_device_eval_batch_size)
     # test_loader = DataLoader(processed_datasets["test"], batch_size=args.per_device_eval_batch_size)
+    
     model, train_loader, val_loader = accelerator.prepare(model, train_loader, val_loader)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     lr_scheduler = transformers.get_scheduler(
-        name=transformers.SchedulerType.COSINE,
+        name=transformers.SchedulerType.CONSTANT,
         optimizer=optimizer,
         num_warmup_steps=args.warmup_steps * accelerator.num_processes,
         num_training_steps=args.num_train_epochs * math.ceil(len(train_loader) / args.gradient_accumulation_steps),
